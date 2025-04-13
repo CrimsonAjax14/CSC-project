@@ -1,0 +1,223 @@
+import java.io.*;
+import java.util.*;
+
+//Represents a single day's attendance.
+
+class DayNode {
+    private String date;
+    private List<String> students;
+    private DayNode next;
+
+    public DayNode(String date, List<String> students) {
+        this.date = date;
+        this.students = students;
+        this.next = null;
+    }
+
+    public String getDate() {
+        return date;
+    }
+
+    public List<String> getStudents() {
+        return students;
+    }
+
+    public DayNode getNext() {
+        return next;
+    }
+
+    public void setNext(DayNode next) {
+        this.next = next;
+    }
+
+    @Override
+    public String toString() {
+        return "Date: " + date + ", Students: " + students;
+    }
+}
+
+
+//Represents a student with attendance and absence explanations.
+
+class StudentNode {
+    private String name;
+    private int classesAttended;
+    private StringBuilder explanations;
+    private StudentNode next;
+
+    public StudentNode(String name) {
+        this.name = name;
+        this.classesAttended = 0;
+        this.explanations = new StringBuilder();
+        this.next = null;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public int getClassesAttended() {
+        return classesAttended;
+    }
+
+    public void incrementClassesAttended() {
+        this.classesAttended++;
+    }
+
+    public void addExplanation(String explanation) {
+        if (explanations.length() > 0) {
+            explanations.append(", ");
+        }
+        explanations.append(explanation);
+    }
+
+    public String getExplanations() {
+        return explanations.toString();
+    }
+
+    public StudentNode getNext() {
+        return next;
+    }
+
+    public void setNext(StudentNode next) {
+        this.next = next;
+    }
+
+    @Override
+    public String toString() {
+        return name + ", " + classesAttended + ", " + explanations;
+    }
+}
+
+
+ //Main class to manage attendance processing.
+
+public class AttendanceManager {
+
+    /**
+     * Reads the attendance file and builds a linked list of DayNodes.
+     * @param filename the name of the attendance file
+     * @return the head of the DayNode linked list
+     */
+    public static DayNode buildAttendanceList(String filename) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filename));
+        String line;
+        DayNode head = null, tail = null;
+
+        while ((line = br.readLine()) != null) {
+            String[] parts = line.trim().split("\\s+");
+            String date = parts[0];
+            List<String> students = new ArrayList<>();
+            for (int i = 1; i < parts.length; i++) {
+                students.add(parts[i] + (i + 1 < parts.length && !parts[i + 1].matches("\\d{1,2}/\\d{1,2}") ? " " + parts[++i] : ""));
+            }
+
+            DayNode node = new DayNode(date, students);
+            if (head == null) {
+                head = node;
+                tail = node;
+            } else {
+                tail.setNext(node);
+                tail = node;
+            }
+        }
+
+        br.close();
+        return head;
+    }
+
+    /**
+     * Builds the student linked list from the attendance linked list.
+     * @param dayHead the head of the attendance list
+     * @return the head of the student list
+     */
+    public static StudentNode buildStudentList(DayNode dayHead) {
+        Map<String, StudentNode> studentMap = new HashMap<>();
+        StudentNode head = null, tail = null;
+
+        while (dayHead != null) {
+            for (String name : dayHead.getStudents()) {
+                if (!studentMap.containsKey(name)) {
+                    StudentNode newNode = new StudentNode(name);
+                    if (head == null) {
+                        head = newNode;
+                        tail = newNode;
+                    } else {
+                        tail.setNext(newNode);
+                        tail = newNode;
+                    }
+                    studentMap.put(name, newNode);
+                }
+                studentMap.get(name).incrementClassesAttended();
+            }
+            dayHead = dayHead.getNext();
+        }
+
+        return head;
+    }
+
+    /**
+     * Updates the student list with explanations from the absence file.
+     * @param filename the absence file name
+     * @param studentHead the head of the student list
+     */
+    public static void updateAbsences(String filename, StudentNode studentHead) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filename));
+        String line;
+        Map<String, StudentNode> studentMap = new HashMap<>();
+        StudentNode temp = studentHead;
+
+        while (temp != null) {
+            studentMap.put(temp.getName(), temp);
+            temp = temp.getNext();
+        }
+
+        while ((line = br.readLine()) != null) {
+            String[] parts = line.split(",", 3);
+            if (parts.length < 3) continue;
+            String date = parts[0].trim();
+            String name = parts[1].trim();
+            String reason = parts[2].trim().replaceAll("^\"|\"$", "");
+
+            StudentNode student = studentMap.get(name);
+            if (student != null) {
+                student.incrementClassesAttended();
+                student.addExplanation(reason + " (" + date + ")");
+            }
+        }
+
+        br.close();
+    }
+
+    /**
+     * Writes the student list to a CSV file.
+     * @param filename the output file name
+     * @param studentHead the head of the student list
+     */
+    public static void writeStudentCSV(String filename, StudentNode studentHead) throws IOException {
+        BufferedWriter bw = new BufferedWriter(new FileWriter(filename));
+
+        while (studentHead != null) {
+            bw.write(studentHead.getName() + "," +
+                    studentHead.getClassesAttended() + "," +
+                    "\"" + studentHead.getExplanations() + "\"");
+            bw.newLine();
+            studentHead = studentHead.getNext();
+        }
+
+        bw.close();
+    }
+
+    //Main method to run the attendance program.
+    public static void main(String[] args) {
+        try {
+            DayNode attendanceList = buildAttendanceList("src/attend_sheet.txt");
+            StudentNode studentList = buildStudentList(attendanceList);
+            updateAbsences("src/absense_sheet.txt", studentList);
+            writeStudentCSV("student_attendance_book.csv", studentList);
+            System.out.println("Attendance processed successfully.");
+        } catch (IOException e) {
+            System.err.println("Error processing files: " + e.getMessage());
+        }
+    }
+}
